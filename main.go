@@ -30,13 +30,13 @@ func main1() {
 
 type Num struct {
 	addChan chan int
-	getChan chan chan int
+	getChan chan int
 	cancel  context.CancelFunc
 }
 
 func NewNum() *Num {
 	addChan := make(chan int)
-	getChan := make(chan chan int)
+	getChan := make(chan int)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
@@ -48,11 +48,7 @@ func NewNum() *Num {
 					return
 				}
 				num = num + val
-			case respChan, ok := <-getChan:
-				if !ok {
-					return
-				}
-				respChan <- num
+			case getChan <- num:
 			case <-ctx.Done():
 				close(addChan)
 				close(getChan)
@@ -73,9 +69,7 @@ func (n *Num) Add(val int) {
 }
 
 func (n *Num) Get() int {
-	respChan := make(chan int)
-	n.getChan <- respChan
-	val := <-respChan
+	val := <-n.getChan
 
 	return val
 }
