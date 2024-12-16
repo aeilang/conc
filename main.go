@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"sync"
 )
@@ -30,20 +31,32 @@ func main1() {
 type Num struct {
 	addChan chan int
 	getChan chan chan int
+	cancel  context.CancelFunc
 }
 
 func NewNum() *Num {
 	addChan := make(chan int)
 	getChan := make(chan chan int)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
 		num := 0
 		for {
 			select {
-			case val := <-addChan:
+			case val, ok := <-addChan:
+				if !ok {
+					return
+				}
 				num = num + val
-			case respChan := <-getChan:
+			case respChan, ok := <-getChan:
+				if !ok {
+					return
+				}
 				respChan <- num
+			case <-ctx.Done():
+				close(addChan)
+				close(getChan)
+				return
 			}
 		}
 	}()
@@ -51,6 +64,7 @@ func NewNum() *Num {
 	return &Num{
 		addChan: addChan,
 		getChan: getChan,
+		cancel:  cancel,
 	}
 }
 
@@ -66,8 +80,14 @@ func (n *Num) Get() int {
 	return val
 }
 
+// Close 关闭Num，清理资源
+func (n *Num) Close() {
+	n.cancel()
+}
+
 func main() {
 	num := NewNum()
+	defer num.Close()
 
 	var wg sync.WaitGroup
 
